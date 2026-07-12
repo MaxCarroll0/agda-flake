@@ -29,7 +29,10 @@
             name = "typecheck-agda";
             runtimeInputs = [ agda-with-libs ];
             text = ''
-              if ! compgen -G '*.agda-lib' > /dev/null; then
+              shopt -s nullglob
+              agda_libs=(*.agda-lib)
+              shopt -u nullglob
+              if (( ''${#agda_libs[@]} == 0 )); then
                 echo "typecheck-agda: no *.agda-lib in $PWD" >&2
                 exit 1
               fi
@@ -57,6 +60,49 @@
               done < <(${sourcesFind})
             '';
           };
+        }
+      );
+
+      lib = eachSystem (
+        system: pkgs: {
+          mkBuild =
+            {
+              src,
+              name ? "agda-build",
+              strict ? false,
+            }:
+            pkgs.stdenv.mkDerivation {
+              inherit name;
+              src = nixpkgs.lib.cleanSourceWith {
+                inherit src;
+                filter =
+                  path: _type:
+                  !(builtins.elem (baseNameOf path) [
+                    ".git"
+                    ".lake"
+                    ".direnv"
+                    "_build"
+                    "latex"
+                    "output"
+                  ]);
+              };
+              buildPhase = ''
+                export HOME="$TMPDIR"
+                mkdir -p "$out"
+                set +e
+                ${self.packages.${system}.typecheck}/bin/typecheck-agda > "$out/typecheck.log" 2>&1
+                status=$?
+                set -e
+                if [ "$status" -eq 0 ]; then echo PASS > "$out/status"; else echo "FAIL ($status)" > "$out/status"; fi
+                tail -n 20 "$out/typecheck.log"
+                if [ "$status" -eq 0 ]; then
+                  ${self.packages.${system}.doc}/bin/doc-agda 2>&1 | tee "$out/doc.log"
+                  find . -type d -name latex -exec cp -r --parents {} "$out/" \;
+                fi
+                ${if strict then ''[ "$status" -eq 0 ] || exit "$status"'' else ""}
+              '';
+              installPhase = "true";
+            };
         }
       );
 
