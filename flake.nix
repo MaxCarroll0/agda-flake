@@ -100,7 +100,7 @@
             runtimeInputs = [ agda-with-libs ];
             text = ''
               shopt -s nullglob
-              agda_libs=(*.agda-lib .*.agda-lib)
+              agda_libs=(*.agda-lib .agda-lib .*.agda-lib)
               shopt -u nullglob
               if (( ''${#agda_libs[@]} == 0 )); then
                 echo "typecheck-agda: no *.agda-lib in $PWD" >&2
@@ -167,7 +167,7 @@
                 tail -n 20 "$out/typecheck.log"
                 ${
                   self.packages.${system}.scan-postulates-and-holes
-                }/bin/scan-postulates-and-holes . > "$out/postulates-and-holes.md"
+                }/bin/scan-postulates-and-holes . > "$out/postulates-and-holes.org"
                 if [ "$status" -eq 0 ]; then
                   ${self.packages.${system}.doc}/bin/doc-agda 2>&1 | tee "$out/doc.log"
                   find . -type d -name latex -exec cp -r --parents {} "$out/" \;

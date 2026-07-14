@@ -61,6 +61,25 @@ type Pst = (FilePath, Int, ByteString, ByteString)
 
 type Hol = (FilePath, Int, ByteString)
 
+dropDot :: FilePath -> FilePath
+dropDot ('.' : '/' : r) = r
+dropDot p = p
+
+orgLink :: FilePath -> Int -> ByteString -> ByteString
+orgLink path line label =
+  BS.concat
+    [ "[[file:"
+    , BSC.pack (dropDot path)
+    , "::"
+    , BSC.pack (show line)
+    , "]["
+    , label
+    , "]]"
+    ]
+
+locationLabel :: FilePath -> Int -> ByteString
+locationLabel path line = BSC.pack (dropDot path ++ ":" ++ show line)
+
 stripLeadingColon :: ByteString -> ByteString
 stripLeadingColon bs =
   let bs' = BS.dropWhile (\w -> w == 0x20 || w == 0x09) bs
@@ -213,15 +232,15 @@ main = do
     sort <$> findAgda "." >>= mapM_ (scanFile psRef hsRef parser)
     psts <- reverse <$> readIORef psRef
     hols <- reverse <$> readIORef hsRef
-    let prefix f l = BSC.pack (dropDot f ++ ':' : show l ++ ": ")
-        dropDot ('.' : '/' : r) = r
-        dropDot p = p
-    BS.putStr "## Postulates\n"
+    BS.putStr "* Postulates\n"
     if null psts
-      then BS.putStr "NO POSTULATES\n"
-      else forM_ psts \(f, l, n, t) -> BS.putStr (BS.concat [prefix f l, n, " : ", t, "\n"])
-    BS.putStr "\n## Holes\n"
-    BS.putStr "Holes mark in-progress proof fragments (UNMECHANISED in the dissertation).\n\n"
+      then BS.putStr "- None\n"
+      else
+        forM_ psts \(f, l, n, t) ->
+          BS.putStr (BS.concat ["- ", orgLink f l n, " :: ", t, "\n"])
+    BS.putStr "\n* Holes\n"
     if null hols
-      then BS.putStr "NO HOLES\n"
-      else forM_ hols \(f, l, x) -> BS.putStr (BS.concat [prefix f l, x, "\n"])
+      then BS.putStr "- None\n"
+      else
+        forM_ hols \(f, l, x) ->
+          BS.putStr (BS.concat ["- ", orgLink f l (locationLabel f l), " :: ", x, "\n"])
