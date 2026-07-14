@@ -1,6 +1,6 @@
 # agda-flake
 
-Nix dev environment for Agda, wrapped with **standard-library** and **agda-categories**. Apps: `typecheck` (all `.agda`/`.lagda*` under `$PWD`, requires a `*.agda-lib`) and `doc` (runs `agda --latex` on each `.lagda.tex`, emitting into `<section>/latex/`).
+Nix dev environment for Agda, wrapped with **standard-library** and **agda-categories**. Apps: `typecheck` (all `.agda`/`.lagda*` under `$PWD`, requires a `*.agda-lib` or `.*.agda-lib`), `doc` (runs `agda --latex` on each `.lagda.tex`, emitting into `<section>/latex/`), and `scan-postulates-and-holes` (reports Agda `postulate` declarations and proof holes).
 
 ## Use
 
@@ -17,6 +17,7 @@ use flake "github:MaxCarroll0/agda-flake?rev=<sha>"
 ```sh
 nix run 'github:MaxCarroll0/agda-flake#typecheck'
 nix run 'github:MaxCarroll0/agda-flake#doc'
+nix run 'github:MaxCarroll0/agda-flake#scan-postulates-and-holes'
 ```
 
 ## Emacs
@@ -38,7 +39,7 @@ nix build --impure --expr \
   '(builtins.getFlake "github:MaxCarroll0/agda-flake").lib.${builtins.currentSystem}.mkBuild { src = ./.; }'
 ```
 
-The result contains `typecheck.log`, a `status` file (`PASS`/`FAIL`), and generated artifacts where applicable. The build itself succeeds either way so the log is always inspectable; pass `strict = true;` to fail the build on a typecheck error. Planned: a generated index of postulates, holes, and incomplete proofs alongside the log.
+The result contains `typecheck.log`, a `status` file (`PASS`/`FAIL`), `postulates-and-holes.md` from the Haskell scanner, and generated artifacts where applicable. The build itself succeeds either way so the log and scanner report are always inspectable; pass `strict = true;` to fail the build on a typecheck error.
 
 ## Formatting
 

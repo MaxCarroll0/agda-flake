@@ -16,6 +16,19 @@
         find . \( -name .git -o -name _build -o -name .direnv -o -name latex \) -prune \
           -o -type f \( -name '*.agda' -o -name '*.lagda' -o -name '*.lagda.tex' -o -name '*.lagda.md' \) -print | sort
       '';
+
+      treeSitterAgda =
+        pkgs:
+        pkgs.tree-sitter.buildGrammar {
+          language = "agda";
+          version = "0.0.0+e8d47a6";
+          src = pkgs.fetchFromGitHub {
+            owner = "tree-sitter";
+            repo = "tree-sitter-agda";
+            rev = "e8d47a6987effe34d5595baf321d82d3519a8527";
+            hash = "sha256-5h56+A7ZypckJ9mwht7XP/66oiehwAEQ4Z6WeVhQBvQ=";
+          };
+        };
     in
     {
       packages = eachSystem (
@@ -48,12 +61,46 @@
             p.agda-categories
           ]);
 
+          haskellToolchain = pkgs.haskellPackages.ghcWithPackages (p: [
+            p.hs-tree-sitter
+          ]);
+
+          scan-postulates-and-holes =
+            let
+              tsAgdaLib = pkgs.linkFarm "treesit-agda-lib" [
+                {
+                  name = "libtree-sitter-agda${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}";
+                  path = "${treeSitterAgda pkgs}/parser";
+                }
+              ];
+            in
+            pkgs.stdenvNoCC.mkDerivation {
+              pname = "scan-postulates-and-holes";
+              version = "0.1.0";
+              src = ./scripts/scan-postulates-and-holes.hs;
+              dontUnpack = true;
+              nativeBuildInputs = [ haskellToolchain ];
+              buildPhase = ''
+                runHook preBuild
+                ghc -O -tmpdir "$NIX_BUILD_TOP" -odir "$NIX_BUILD_TOP" -hidir "$NIX_BUILD_TOP" \
+                  -L${tsAgdaLib} -ltree-sitter-agda \
+                  -optl-Wl,-rpath,${tsAgdaLib} \
+                  "$src" -o scan-postulates-and-holes
+                runHook postBuild
+              '';
+              installPhase = ''
+                runHook preInstall
+                install -Dm755 scan-postulates-and-holes "$out/bin/scan-postulates-and-holes"
+                runHook postInstall
+              '';
+            };
+
           typecheck = pkgs.writeShellApplication {
             name = "typecheck-agda";
             runtimeInputs = [ agda-with-libs ];
             text = ''
               shopt -s nullglob
-              agda_libs=(*.agda-lib)
+              agda_libs=(*.agda-lib .*.agda-lib)
               shopt -u nullglob
               if (( ''${#agda_libs[@]} == 0 )); then
                 echo "typecheck-agda: no *.agda-lib in $PWD" >&2
@@ -118,6 +165,9 @@
                 set -e
                 if [ "$status" -eq 0 ]; then echo PASS > "$out/status"; else echo "FAIL ($status)" > "$out/status"; fi
                 tail -n 20 "$out/typecheck.log"
+                ${
+                  self.packages.${system}.scan-postulates-and-holes
+                }/bin/scan-postulates-and-holes . > "$out/postulates-and-holes.md"
                 if [ "$status" -eq 0 ]; then
                   ${self.packages.${system}.doc}/bin/doc-agda 2>&1 | tee "$out/doc.log"
                   find . -type d -name latex -exec cp -r --parents {} "$out/" \;
@@ -134,9 +184,11 @@
           default = pkgs.mkShell {
             packages = with self.packages.${system}; [
               agda-with-libs
+              haskellToolchain
               typecheck
               doc
               fmt
+              scan-postulates-and-holes
             ];
             shellHook = ''
               if [ -d .git ] && [ ! -e .git/hooks/pre-commit ]; then
@@ -157,6 +209,10 @@
           doc = {
             type = "app";
             program = "${self.packages.${system}.doc}/bin/doc-agda";
+          };
+          scan-postulates-and-holes = {
+            type = "app";
+            program = "${self.packages.${system}.scan-postulates-and-holes}/bin/scan-postulates-and-holes";
           };
           fmt = {
             type = "app";
